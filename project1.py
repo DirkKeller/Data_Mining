@@ -1,334 +1,307 @@
-"""
-Dal Col Giada 0093122
-Keller Dirk 4282264
+"""Dal Col Giada 0093122
+Keller Dirk """
 
-"""
-import time
-import random
-import pandas as pd
 import numpy as np
 from anytree import Node, RenderTree
 from anytree.exporter import DotExporter
+import pandas as pd
+import random
 from sklearn.metrics import confusion_matrix, accuracy_score, recall_score, precision_score
+from sklearn.tree import DecisionTreeClassifier, plot_tree
+import time
+import matplotlib.pyplot as plt
+from scipy.stats import bootstrap
+#import statsmodels
+#from statsmodels.stats.contingency_tables import mcnemar
+np.random.seed(1234)
+random.seed(1234)
 
-class DecisionTree:
-    def __init__(self, features: list):
-        """
-        Initializes the Decision Tree classifier.
-            # Arguments
-                :param features: list. The names of the features that are considered
-        """
-        self.feature_names = features
-        self.tree_iter = 1
+def tree_grow(X: np.ndarray, Y : np.ndarray, nmin: int, minleaf: int, nfeat: int): # -> RenderTree:
+    global k; k=1
+    nodelist =[]
+    root = Node(f'root {k-1}', features=X, label=Y, attribute_index=None, best_split=None)
+    nodelist.append(root)
 
-    def tree_grow(self, x: np.ndarray, y: np.ndarray, nmin: int, minleaf: int, nfeat: int) -> RenderTree:
-        """
-        A tree expansion function that builds a single decision tree depending on the nmin, minleaf, nfeat
-        hyper-parameters. The  decision tree selects the feature that allows the best separation of the values and splits
-        the data set at the level of the features value. The best separation is measured by the split's impurity, with
-        gini-index as qualitative measure for a split's impurity. nmin and minleaf are used to stop growing the tree
-        early, to prevent overfitting and/or to save computation. The feature with the larges impurity reduction will be
-        expanded, the other candidate features will be discarded. The function will only perform a split, if it meets the
-        nmin and minleaf constrain. If there is no split that meets the nmin constraint, the node becomes a leaf node.
-        The function returns a tree object that is represents the best data-fitted hypothesis of the hypothesis space.
-        It can be further used for prediction.
-            # Arguments
-                :param x: ndarray. A data matrix (2-dimensional array) containing the feature values.
-                :param y: ndarray. A vector (1-dimensional array) of class labels. The class label must be binary, with
-                    values coded as 0 and 1.
-                :param nmin: integer. The number of observations that a node must contain at least, for it to be allowed
-                    to be split.
-                :param minleaf: integer. The minimum number of observations required for a leaf node; hence a split that
-                    node with fewer than minleaf observations is not acceptable.
-                :param nfeat: integer. The parameter nfeat denotes the number of features that should be considered for 
-                    each split; the number of features are drawn at random
-                :return: RenderTree. Tree object containing all linked nodes and their attributes to construct the full 
-                    tree.
-        """
+    while(len(nodelist) != 0):
 
-        # Initialize a node list to store all current nodes, starting with the root node.
-        node_list = [Node(f'root {self.tree_iter - 1}', features=x, label=y, attribute_index=None, best_split=None)]
-        root = node_list[0]
-        self.tree_iter = 1
+        current_node = nodelist[0]
+        nodelist.remove(current_node)
 
-        while len(node_list) != 0:
-            # Extract the first node and remove it from the node list
-            current_node = node_list[0]
-            node_list.remove(current_node)
+        best_impurity_reduction=0
+        candidate_child_nodes=[None, None] # it saves the child nodes that gives the current best impurity reduction; it is updated after the firs loop
+        best_split_value=None
+        if impurity(current_node.label) > 0:
 
-            # Check if the current node is a leaf node; expand, otherwise node is just deleted.
-            if self.impurity(current_node.label) > 0:
-                # Check if nmin constraint is satisfied; expand, otherwise node is just deleted.
-                if current_node.features.shape[0] >= nmin:
-                    # For each tree expansion initialize: the best feature index, split and impurity reduction score.
-                    best_imp_reduc = 0
-                    best_split, best_feat_idx = None, None
-                    candidate_children = [None, None]
+            c=random.sample(range(current_node.features.shape[1]),k=nfeat)
 
-                    # Random forest random feature selection
-                    rng_feat_idx = random.sample(range(current_node.features.shape[1]), k=nfeat)
-                    sub_feat = current_node.features[:, rng_feat_idx].T
+            selected_col = current_node.features[:,c].T
 
-                    # Iterate through all selected features
-                        # First, check the impurity reduction of the parent node, then perform the splits, argmax over
-                        # the previous and current impurity reduction and save the value; select the feature with the
-                        # best impurity reduction and its candidate children
-                    for idx, feat in enumerate(sub_feat):
-                        # Check that the number of unique to-be-splitted feature values is at least larger than 1.
-                        if len(np.unique(feat)) > 1:
-                            split_value = self.best_split(feat, current_node.label)
-                            temp_Lchild, temp_Rchild = self.split(current_node, rng_feat_idx[idx], split_value, minleaf)
 
-                            # Impurity reduction is only computed if the split is acceptable
-                            if temp_Lchild is not None and temp_Rchild is not None:
-                                new_imp_reduc = self.impurity_reduction(current_node, temp_Lchild, temp_Rchild)
+            #check the constraint nmin
+            if current_node.features.shape[0]>=nmin :
+                best_attribute_index=None
+                for idx, attribute in enumerate(selected_col):
 
-                                # Incremental increase of the impurity reduction (no history);
-                                if best_imp_reduc < new_imp_reduc:
-                                    best_imp_reduc = new_imp_reduc
-                                    best_feat_idx, best_split = rng_feat_idx[idx], split_value
-                                    candidate_children[0], candidate_children[1] = temp_Lchild, temp_Rchild
+                    if len(np.unique(attribute))>1:
+                        split_value = bestsplit(attribute, current_node.label)
 
-                    # Append only valid 'candidate children' to the node list nodelist (and the tree)
-                    if candidate_children[0] is not None and candidate_children[1] is not None:
-                        candidate_children[0].parent, candidate_children[1].parent = current_node, current_node
-                        current_node.best_split, current_node.feat_index = best_split, best_feat_idx
-                        current_node.name = current_node.name + '\n' + self.feature_names[
-                            best_feat_idx] + ': \n L > ' + str(round(best_split, 3)) + ' > R'
-                        node_list.extend([candidate_children[0], candidate_children[1]])
+                        temp_Lchild, temp_Rchild = split(current_node, c[idx], split_value, minleaf)
 
-                        self.tree_iter += 1
-        return RenderTree(root)
+                        if (temp_Lchild,temp_Rchild)!=(None, None): # we can compute impurity reduction only the split is acceptable
+                            new_impurity_reduction = impurity_reduction(current_node, temp_Lchild,temp_Rchild)
 
-    def tree_pred(self, x: np.ndarray, tr: RenderTree) -> list:
-        """
-        A prediction function that uses a tree object to predict classes based on data. The function requires a tree
-        build on binary classification. The function returns a list of predicted labels.
-            # Arguments
-                :param x: ndarray. A data matrix (2-dimensional array) containing the feature values.
-                :param tr: RenderTree. A tree object containing linked nodes.
-                :return: list. List of predictions for all instances in x.
-        """
 
-        y_pred = []
-        # For each instance in the data set:
-        # split the data according to the best split of the selected feature in the trained tree object until a
-        # leaf node is reached. Then take the majority vote of a leaf node to decide on the predicted class label.
-        for idx, row in enumerate(x):
-            current_node = tr.node
-            while not current_node.is_leaf:
-                split_attribute = current_node.feat_index
-                if row[split_attribute] >= current_node.best_split:
-                    current_node = current_node.children[0]
-                else:
-                    current_node = current_node.children[1]
+                            if best_impurity_reduction < new_impurity_reduction: #at the first for loop it results always true
+                                best_impurity_reduction=new_impurity_reduction
+                                best_attribute_index=c[idx]
+                                best_split_value=split_value
+                                candidate_child_nodes[0]=temp_Lchild
+                                candidate_child_nodes[1]=temp_Rchild
 
-            # Take the majority vote by sum and append it to the list
-            if sum(current_node.label) > 0.5 * len(current_node.label):
-                y_pred.append(1)
-            elif sum(current_node.label) == 0.5 * len(current_node.label):
-                y_pred.append(round(random.random(), 0))
-            else:
-                y_pred.append(0)
-        return y_pred
 
-    def tree_grow_b(self, x: np.ndarray, y: np.ndarray, nmin: int, minleaf: int, nfeat: int, m: int) -> list:
-        """
-        A wrapper function for the tree_grow() function that implements bagging. The function bootstraps a new sample
-        from the data set (across all features) with the same sample size. Each time, a simple tree is grown an appended
-        to a list of trees. The function returns a list with m trees that can be used for prediction.
-            # Arguments
-                :param m: integer. The number of bootstrap samples drawn from the data set; also the number of trees
-                    returned.
-                :return: list. A list of single trees.
-                See tree_grow() for the other parameters
-        """
+                    # impurity reduction of the parent node - proportion elemts to the left * the impurity of the left child node - proportion elemts to the right * the impurity of the right child node -
+                        # make all the splits -> save the impurity reduction in a list
+                        # argmax over the impurity reduction list; only save the current impurity reduction if its better than the previous
 
-        tree_list = []
-        for idx in range(m):
-            n = x.shape[0]
-            v = range(n)
-            v_new = np.random.choice(v, n, replace=True)
-            X_new, Y_new = x[v_new, :], y[v_new]
-            tree_list.append(self.tree_grow(X_new, Y_new, nmin, minleaf, nfeat))
-        return tree_list
+                # when we exit the for loop we have checked all the nfeat attributes required and in the list "candidate_child" we have saved
+                # children that need to be analyzed next: we append them in nodelist
 
-    def tree_pred_b(self, x: np.ndarray, tree_list: list) -> list:
-        """
-        A wrapper function for the tree_pred() function that implements bagging. The prediction function that uses a
-        tree object to predict classes based on data. The function requires a tree build on binary classification. The
-        function returns a list of predicted labels.
-            # Arguments
-                :param tree_list: list. Contains a list of tree objects
-                :return: list. List of predictions for all instances in x.
-                See tree_pred() for the other parameters
-        """
+                if candidate_child_nodes[0]!=None and candidate_child_nodes[1] != None:
+                    candidate_child_nodes[0].parent=current_node
+                    candidate_child_nodes[1].parent=current_node
+                    current_node.best_split = best_split_value
+                    current_node.attribute_index = best_attribute_index
+                    current_node.name=current_node.name + '\n' + feature_names[best_attribute_index] + ': \n L > ' + str(round(best_split_value,3)) + ' > R'
+                    # elif current_node.name[0] == 'R': current_node.name=current_node.name + ': \n' + feature_names[best_attribute_index] + ': <=' + str(round(best_split_value,3))
+                    # else: current_node.name=current_node.name + ': \n' + feature_names[best_attribute_index] + ': ' + str(round(best_split_value,3))
 
-        # For each tree: Predict the vector of labels for each instance in the data set.
-        y_pred_b, majority_y_pred_b = [], []
-        for idx, tree in enumerate(tree_list):
-            y_pred_b.append(self.tree_pred(x, tree))
 
-        # Across all predictions for the ith instance determine the majority vote across all tree predictions.
-        y = np.array(y_pred_b)
-        for i in range(y.shape[1]):
-            if sum(y[:, i]) > 0.5 * len(y[:, i]):
-                majority_y_pred_b.append(1)
-            elif sum(y[:, i]) == 0.5 * len(y[:, i]):
-                majority_y_pred_b.append(round(random.random(), 0))
-            else:
-                majority_y_pred_b.append(0)
-        return majority_y_pred_b
+                    nodelist.append(candidate_child_nodes[0])
+                    nodelist.append(candidate_child_nodes[1])
 
-    """   """
+                    k+=1
+                   # print("k, shape of left and right children: \n",k,   candidate_child_nodes[0].features.shape, candidate_child_nodes[1].features.shape)
 
-    def impurity(self, v):
-        """ Computes the impurity of a node: proportion class 1 elements/node total * proportion class 2 elements/node total """
-        return (len(v[v == 0]) / len(v)) * (len(v[v == 1]) / len(v))
+        #print("length of the nodelist", len(nodelist))
+    return RenderTree(root)
 
-    def best_split(self, x, y):
-        """    """
+def tree_pred(x, tr):
+    y=[]
+    for idx, row in enumerate(x):
+        current_node=tr.node
+        while(not current_node.is_leaf):
+            split_attribute= current_node.attribute_index
+            if row[split_attribute]>=current_node.best_split: current_node=current_node.children[0]
+            else: current_node=current_node.children[1]
+        if sum(current_node.label)>0.5*len(current_node.label): y.append(1)
+        elif sum(current_node.label)==0.5*len(current_node.label): y.append(round(random.random(),0))
+        else: y.append(0)
+    return y
 
-        x_sorted = np.sort(np.unique(x))
-        split_points = (x_sorted[0:-1] + x_sorted[1:]) / 2
-        imp_y = self.impurity(y)
-        reduc_imp = []
-        for i in range(len(split_points)):
-            left_child = y[x >= split_points[i]]
-            imp_left = self.impurity(left_child)
-            prop_left = len(left_child) / len(x)
-            right_child = y[x < split_points[i]]
-            imp_right = self.impurity(right_child)
-            prop_right = len(right_child) / len(x)
-            reduc_imp.append(imp_y - prop_left * imp_left - prop_right * imp_right)
+def tree_grow_b(X: np.ndarray, Y : np.ndarray, nmin: int, minleaf: int, nfeat: int, m: int): # -> RenderTree:
+    T=[]
+    for idx in range(m):
+        n=X.shape[0]
+        v=range(n)
+        v_new = np.random.choice(v, n, replace=True)
+        X_new=X[v_new, :]
+        Y_new=Y[v_new]
+        T.append(tree_grow(X_new,Y_new,nmin,minleaf,nfeat))
+    return T
 
-        index = reduc_imp.index(max(reduc_imp))
-        return split_points[index]
+def tree_pred_b(T, x):
+    Y=[]
+    z=[]
+    for idx, tree in enumerate(T):
+        Y.append(tree_pred(x,tree))
+    y=np.array(Y) # ith column corresponds to ith tree prediction
+    for i in range(y.shape[1]):
+        if sum(y[:,i])>0.5*len(y[:,i]): z.append(1)
+        elif sum(y[:,i])==0.5*len(y[:,i]): z.append(round(random.random(), 0))
+        else: z.append(0)
+    return z
 
-    def impurity_reduction(self, parent: Node, left_child: Node, right_child: Node) -> float:
-        """ """
-        return self.impurity(parent.label) - self.impurity(left_child.label) * len(left_child.features) / len(
-            parent.features) - self.impurity(right_child.label) * len(right_child.features) / len(parent.features)
+# def nodeattrfunc(node):
+#     return '%s %s %s' % (str(impurity(node.label)), str(len(node.label[node.label==0])),str(len(node.label[node.label==1])))
 
-    def split(self, parent: Node, feat_idx, pos: int, minleaf) -> tuple:  # add the contraint minleaf
-        """   """
-        if len(parent.features[parent.features[:, feat_idx] >= pos]) < minleaf or len(
-                parent.features[parent.features[:, feat_idx] < pos]) < minleaf:
-            return (None, None)
-        else:
-            # we have to find a way to pass some other names; IDEA: save the depth of the three as another attribute of the object Node?
-            # or better save the attribute we have split for (useful for the prediction later)
+# def edgeattrfunc(node):
+#     sorted=np.sort(node.features[node.attribute_index])
+#     return ' %s' % (sorted[node.pos_best_split])
 
-            Lchild = Node(f'L {self.tree_iter}', features=parent.features[parent.features[:, feat_idx] >= pos],
-                          label=parent.label[parent.features[:, feat_idx] >= pos])
-            Rchild = Node(f'R {self.tree_iter}', features=parent.features[parent.features[:, feat_idx] < pos],
-                          label=parent.label[parent.features[:, feat_idx] < pos])
+
+def impurity(v):
+    n0=len(v[v==0])
+    n1=len(v[v==1])
+    return n0/len(v) *n1/len(v)
+
+
+def bestsplit(x,y):
+    x_sorted=np.sort(np.unique(x))
+    splitpoints=(x_sorted[0:-1]+x_sorted[1:])/2
+    imp_y=impurity(y)
+    reduc_imp=[]
+    for i in range(len(splitpoints)):
+        # if y[i] != y[i_prev]:
+        left_child= y[x>=splitpoints[i]]
+        imp_left=impurity(left_child)
+        prop_left=len(left_child)/len(x)
+        right_child=y[x<splitpoints[i]]
+        imp_right=impurity(right_child)
+        prop_right=len(right_child)/len(x)
+        reduc_imp.append(imp_y-prop_left*imp_left-prop_right*imp_right)
+
+    index=reduc_imp.index(max(reduc_imp))
+    return splitpoints[index]
+
+
+def impurity_reduction(parent: Node, Lchild: Node, Rchild: Node) -> int:
+# we don't have to pass to "impurity" the attribute beacuse it's not used, we only need to know how are the elements divided
+# in the two classes (how many in 0 and how many in 1)
+# Node.features is a matrix: if we want to know the number of elements in that node we have to compute the number of rows of that matrix
+    return impurity(parent.label) - impurity(Lchild.label) * len(Lchild.features) / len(parent.features) - impurity(Rchild.label) * len(Rchild.features) / len(parent.features)
+
+
+def split(parent: Node, type, pos: int, minleaf) -> tuple: #add the contraint minleaf
+    if len(parent.features[parent.features[:,type] >= pos])<minleaf or len(parent.features[parent.features[:,type] < pos])<minleaf: return (None,None)
+    else: # w ehav to find a way to pass some other names; IDEA: save the depth of the three as another attribute of the object Node?
+        # or better save the attribute we have split for (useful for the prediction later)
+
+        Lchild = Node(f'L {k}', features=parent.features[parent.features[:,type] >= pos], label=parent.label[parent.features[:,type] >= pos])
+        Rchild = Node(f'R {k}', features=parent.features[parent.features[:,type] < pos], label=parent.label[parent.features[:, type] < pos])
         return Lchild, Rchild
 
 
-def eclipse_data(filename: list) -> tuple:
-    """
-    The funcion loads the eclipse data and splits it into a training set (past) and a test set (future).
-    # Arguments
-        :param filename: list. Accepts a list of filenames
-        :return: tuple. The features and labels of the tain and test set, as well as, the dataframe of the data.
-    """
-    # Collect the data sets
-    data_sets = []
-    for idx, name in enumerate(filename):
-        with open(name, 'r') as f:
-            data = pd.read_csv(f, delimiter=';')
-            data_sets.append(data)
-
-    # Prepare the training set
-    train_x = np.asarray((data_sets[0].iloc[:, 2:44]).drop(['post'], axis=1))
-    train_y = np.asarray(data_sets[0].iloc[:, 3])
-    train_y[train_y[:] != 0] = 1 # binarize the classes
-
-    # Prepare the test set
-    test_x = np.asarray((data_sets[1].iloc[:, 2:44]).drop(['post'], axis=1))
-    test_y = np.asarray(data_sets[1].iloc[:, 3])
-    test_y[test_y[:] != 0] = 1
-
-    feature_names = (data_sets[0].iloc[:, 2:44]).drop(['post'], axis=1).columns
-    return train_x, train_y, test_x, test_y, feature_names
-
-def mc_nemar(y: list, pred1: list, pred2: list):
-    """
-    The McNemar test computes the cross table of the two predictions (i.e. a table containing the number of correctly
-    predictions in both, number of correct prediction in 1 but no in 2, etc.). The cases correct1/non-correct2 and
-    non-correct1/correct2 (anti-diagonal of the table) are the elements of the statistic for the test.
-        # Arguments
-            :param y: list. A list of ground truth labels
-            :param pred1: list. A list of predictions of the first model
-            :param pred2: list. A list of predictions of the second model
-    """
-
-    # Initialize boolean vector (prediction is the same as ground truth)
-    bool1, bool2 = y == pred1, y == pred2
-    # Computing the contingency tables for the McNemar test
-    print(pd.crosstab(bool1, bool2))
 
 
-def main():
-    # Set seeds for consistency
-    np.random.seed(1234)
-    random.seed(1234)
-
-    # Collect the training and test set
-    filenames = ['eclipse-metrics-packages-2.0.csv', 'eclipse-metrics-packages-3.0.csv']
-    trainX, trainY, testX, testY, names = eclipse_data(filenames)
-
-    # Get a Tree object
-    dt = DecisionTree(names)
-
-    """ (1) without random forest, no bagging (all features) """
-    tic = time.time()
-    tr = dt.tree_grow(trainX, trainY, nmin=15, minleaf=5, nfeat=41)
-    print(f'\nWithout random forest/Without bootstrap: \n In {round(time.time() - tic, 3)}s')
-
-    # predict tree1 on the test set
-    y_pred = dt.tree_pred(testX, tr)
-    print(f' accuracy: {round(accuracy_score(testY, y_pred), 3)},'
-          f' precision: {round(precision_score(testY, y_pred), 3)},'
-          f' recall: {round(recall_score(testY, y_pred), 3)}')
-    print(confusion_matrix(testY, y_pred))
-
-    # plotting
-    DotExporter(tr.node).to_picture('NoBagNoBoot.png')
-
-    """ (2) with random forest, no bagging (all features) """
-    tic = time.time()
-    tr2 = dt.tree_grow_b(trainX, trainY, nmin=15, minleaf=5, nfeat=41, m=100)
-    print(f'\n Without random forest/with bagging: \nIn {round(time.time() - tic, 3)}')
-
-    # predict tree2 on the test set
-    y_pred2 = dt.tree_pred_b(testX, tr2)
-    print(f' accuracy: {round(accuracy_score(testY, y_pred2), 3)},'
-          f' precision: {round(precision_score(testY, y_pred2), 3)},'
-          f' recall: {round(recall_score(testY, y_pred2), 3)}')
-
-    print(confusion_matrix(testY, y_pred2))
-
-    """ (3) with random forest, with bagging (all features) """
-    tic = time.time()
-    tr3 = dt.tree_grow_b(trainX, trainY, nmin=15, minleaf=5, nfeat=6, m=100)
-    print(f'\nWith random forest/with bagging: \nIn {round(time.time() - tic, 3)}')
-
-    # predict tree2 on the test set
-    y_pred3 = dt.tree_pred_b(testX, tr3)
-    print(f' accuracy: {round(accuracy_score(testY, y_pred3), 3)},'
-          f' precision: {round(precision_score(testY, y_pred3), 3)},'
-          f' recall: {round(recall_score(testY, y_pred3), 3)}')
-    print(confusion_matrix(testY, y_pred3))
-
-    """ McNemar test on the models """
-    print("\nContingency table for model 1 and 2: ")
-    mc_nemar(testY, y_pred, y_pred2)
-    print("\nContingency table for model 1 and 3: ")
-    mc_nemar(testY, y_pred, y_pred3)
-    print("\nContingency table for model 2 and 3: ")
-    mc_nemar(testY, y_pred2, y_pred3)
 
 
-main()
+
+
+
+
+
+
+
+
+data_sets = []
+for idx, name in enumerate(['eclipse-metrics-packages-2.0.csv', 'eclipse-metrics-packages-3.0.csv', 'pimaindians.txt']):
+    with open(name, 'r') as f:
+        data = pd.read_csv(f, delimiter=';')
+        data_sets.append(data)
+
+train_X=data_sets[0].iloc[:,2:44]
+trainY= np.asarray(train_X.iloc[:,1])
+trainY[trainY[:] != 0] = 1
+trainX=train_X.drop(['post'], axis=1)
+
+global feature_names; feature_names = trainX.columns
+
+trainX = np.asarray(trainX)
+
+test_X=data_sets[1].iloc[:,2:44]
+testY= np.asarray(test_X.iloc[:,1])
+testY[testY[:] != 0] = 1
+
+testX=np.asarray(test_X.drop(['post'], axis=1))
+
+
+
+""" (1) without bootstrapping, no bagging (all features) """
+# tic=time.time()
+# tr=tree_grow(trainX, trainY, nmin=15, minleaf=5, nfeat=41)
+# print('No bagging/No bootstrap: ', time.time()-tic)
+
+# # predict tree1 on the test set
+# Y_pred=tree_pred(testX, tr)
+# print('accuracy: ', accuracy_score(testY, Y_pred), ', precision: ', precision_score(testY, Y_pred), ', recall: ', recall_score(testY, Y_pred ))
+# print(confusion_matrix(testY, Y_pred))
+
+# # plotting
+# DotExporter(tr.node).to_picture('NoBagNoBoot.png')
+
+
+# """ (2) with bootstrapping, no bagging (all features) """
+# tic=time.time()
+# tr2=tree_grow_b(trainX, trainY, nmin=15, minleaf=5, nfeat=41, m=100)
+# print('No bagging/With bootstrap: ',time.time()-tic)
+
+# # predict tree2 on the test set
+# Y_pred2=tree_pred_b( tr2, testX)
+# print('accuracy: ', accuracy_score(testY, Y_pred2), ', precision: ', precision_score(testY, Y_pred2), ', recall: ', recall_score(testY, Y_pred2))
+# print(confusion_matrix(testY, Y_pred2))
+
+# """ (3) with bootstrapping, with bagging (all features) """
+# tic=time.time()
+# tr3=tree_grow_b(trainX, trainY, nmin=15, minleaf=5, nfeat=6, m=100)
+# print('With bagging/With bootstrap: ',time.time()-tic)
+
+# # predict tree2 on the test set
+# Y_pred3=tree_pred_b(tr3, testX)
+# print( 'accuracy: ', accuracy_score(testY, Y_pred3),', precision: ', precision_score(testY, Y_pred3), ', recall: ', recall_score(testY, Y_pred3))
+# print(confusion_matrix(testY, Y_pred3))
+
+
+
+# This part is for computing the contingency tables  for the McNemar test
+tr=tree_grow(trainX, trainY, nmin=15, minleaf=5, nfeat=41)
+Y_pred=tree_pred(testX, tr)
+bool1=testY==Y_pred # boolean vector with True if the prediction is correct or false
+
+tr2=tree_grow_b(trainX, trainY, nmin=15, minleaf=5, nfeat=41, m=100)
+Y_pred2=tree_pred_b( tr2, testX)
+bool2=testY==Y_pred2
+
+tr3=tree_grow_b(trainX, trainY, nmin=15, minleaf=5, nfeat=6, m=100)
+Y_pred3=tree_pred_b(tr3, testX)
+bool3=testY==Y_pred3
+
+
+# in the mcNemar test I need to compute the cross table of the two predictions, i.e. a table containing the number of
+# correctly predictions in both, number of correct prediction in 1 but no in 2, etc
+# what we actually need are the cases correct1/non-correct2 and non-correct1/correct2 (anti diagonal of the table) because
+# these are the elements of the statistic for the test
+
+# This will build the contingency table for the comparison of model 1 and 2, we use these values in an online calcualtor for mcnemar
+print("Contingency table for model 1 and 2: \n",pd.crosstab(bool1,bool2))
+print("Contingency table for model 1 and 3: \n",pd.crosstab(bool1,bool3))
+print("Contingency table for model 2 and 3: \n",pd.crosstab(bool2,bool3))
+
+
+
+
+
+
+# without baggin, works!!
+# X=np.asarray(data_sets[1].iloc[:,:-1])
+# Y=np.asarray(data_sets[1].iloc[:,-1])
+# t1 = tree_grow(X,Y,nmin=20, minleaf=5,nfeat=8)
+# y_pred=tree_pred(X, t1)
+# print(confusion_matrix(Y, y_pred))
+
+
+# clf = DecisionTreeClassifier()
+# clf = clf.fit(X, Y)
+# print(confusion_matrix(Y, clf.predict(X)))
+
+
+#DotExporter(t1.node).to_picture('tree.png')
+# for pre, fill, node in t1:
+#     class_zero=str(len(node.label[node.label==0]))
+#     class_one=str(len(node.label[node.label==1]))
+#     print("%s%s %s %s %s" % (pre, node.name, class_zero, class_one, node.attribute_index))
+
+
+
+# with bagging works but it doesn't seem to improve increasing the m
+# X=np.asarray(data_sets[2].iloc[:,:-1])
+# Y=np.asarray(data_sets[2].iloc[:,-1])
+# t = tree_grow_b(X,Y,nmin=20, minleaf=5, nfeat=8, m=10)
+
+# y_pred=tree_pred_b(t,X)
+# print(confusion_matrix(Y, y_pred))
+
+# clf = DecisionTreeClassifier(random_state=0)
+# clf = clf.fit(X, Y)
+# print(confusion_matrix(Y, clf.predict(X)))
+# plot_tree(clf)
+# plt.show()
