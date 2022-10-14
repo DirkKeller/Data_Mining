@@ -186,7 +186,7 @@ class DecisionTree:
     def best_split(self, x, y):
         """  Computes the best split value according to the numeric attribute x. It considers binary split of the form x[i]>=c 
         where "c" is the average of two consecutive values of x in the sorted order. The choice of the best split is done accordingly
-        to the best impurity reduction of the gini-index function.
+        to the best impurity reduction using gini-index.
             # Arguments:
                 :param x: ndarray. A vector (1-dimensional array) containing the feature values.
                 :param y: ndarray. A vector (1-dimensional array) of class labels. The class label must be binary, with
@@ -210,12 +210,12 @@ class DecisionTree:
         return split_points[index]
 
     def impurity_reduction(self, parent: Node, left_child: Node, right_child: Node) -> float:
-        """ Computes the impurity reduction of the split that generates Nodes "left_child" and "right_child" from the Node "parent" , based on the gini-index function. 
+        """ Computes the impurity reduction of the split that generates Nodes "left_child" and "right_child" from the Node "parent" , based on gini-index. 
              # Arguments:
                 :param parent: Node. The parent node.
                 :param left_child: Node. The left child.
                 :param right_child: Node. The right child.
-                return: float. Value of the impurity reduction of the considered split.
+                :return: float. Value of the impurity reduction of the considered split.
              """
         return self.impurity(parent.label) - self.impurity(left_child.label) * len(left_child.features) / len(
             parent.features) - self.impurity(right_child.label) * len(right_child.features) / len(parent.features)
@@ -228,14 +228,11 @@ class DecisionTree:
                    :param feat_idx: int. Index of the attribute considered for the split.
                    :param pos: float. Split value.
                    :param minleaf: int. See "tree_grow".
-                   return: tuple. Tuple of two elements of class Node, containinf left adn right children. If no split is performed returns (None,None)."""
+                   :return: tuple. Tuple of two elements of class Node, containinf left adn right children. If no split is performed returns (None,None)."""
         if len(parent.features[parent.features[:, feat_idx] >= pos]) < minleaf or len(
                 parent.features[parent.features[:, feat_idx] < pos]) < minleaf:
             return (None, None)
         else:
-            # we have to find a way to pass some other names; IDEA: save the depth of the three as another attribute of the object Node?
-            # or better save the attribute we have split for (useful for the prediction later)
-
             Lchild = Node(f'L {self.tree_iter}', features=parent.features[parent.features[:, feat_idx] >= pos],
                           label=parent.label[parent.features[:, feat_idx] >= pos])
             Rchild = Node(f'R {self.tree_iter}', features=parent.features[parent.features[:, feat_idx] < pos],
