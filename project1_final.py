@@ -134,7 +134,7 @@ class DecisionTree:
     def tree_grow_b(self, x: np.ndarray, y: np.ndarray, nmin: int, minleaf: int, nfeat: int, m: int) -> list:
         """
         A wrapper function for the tree_grow() function that implements bagging. The function bootstraps a new sample
-        from the data set (across all features) with the same sample size. Each time, a simple tree is grown an appended
+        from the data set (across all features) with the same sample size. Each time, a simple tree is grown and appended
         to a list of trees. The function returns a list with m trees that can be used for prediction.
             # Arguments
                 :param m: integer. The number of bootstrap samples drawn from the data set; also the number of trees
@@ -155,7 +155,7 @@ class DecisionTree:
     def tree_pred_b(self, x: np.ndarray, tree_list: list) -> list:
         """
         A wrapper function for the tree_pred() function that implements bagging. The prediction function that uses a
-        tree object to predict classes based on data. The function requires a tree build on binary classification. The
+        tree object to predict classes based on data. The function requires a list of trees build on binary classification. The
         function returns a list of predicted labels.
             # Arguments
                 :param tree_list: list. Contains a list of tree objects
@@ -184,7 +184,14 @@ class DecisionTree:
         return (len(v[v == 0]) / len(v)) * (len(v[v == 1]) / len(v))
 
     def best_split(self, x, y):
-        """    """
+        """  Computes the best split value according to the numeric attribute x. It considers binary split of the form x[i]>=c 
+        where "c" is the average of two consecutive values of x in the sorted order. The choice of the best split is done accordingly
+        to the best impurity reduction of the gini-index function.
+            # Arguments:
+                :param x: ndarray. A vector (1-dimensional array) containing the feature values.
+                :param y: ndarray. A vector (1-dimensional array) of class labels. The class label must be binary, with
+                    values coded as 0 and 1.
+                :return: float. Value of the best split for the considered attribute."""
 
         x_sorted = np.sort(np.unique(x))
         split_points = (x_sorted[0:-1] + x_sorted[1:]) / 2
@@ -203,12 +210,25 @@ class DecisionTree:
         return split_points[index]
 
     def impurity_reduction(self, parent: Node, left_child: Node, right_child: Node) -> float:
-        """ """
+        """ Computes the impurity reduction of the split that generates Nodes "left_child" and "right_child" from the Node "parent" , based on the gini-index function. 
+             # Arguments:
+                :param parent: Node. The parent node.
+                :param left_child: Node. The left child.
+                :param right_child: Node. The right child.
+                return: float. Value of the impurity reduction of the considered split.
+             """
         return self.impurity(parent.label) - self.impurity(left_child.label) * len(left_child.features) / len(
             parent.features) - self.impurity(right_child.label) * len(right_child.features) / len(parent.features)
 
-    def split(self, parent: Node, feat_idx, pos: int, minleaf) -> tuple:  # add the contraint minleaf
-        """   """
+    def split(self, parent: Node, feat_idx: int, pos, minleaf) -> tuple:  # add the contraint minleaf
+        """ Computes the split from the Node "parent" satisfying the constraint of minleaf (see "tree_grow"). The split is done according to the value
+        "pos" for the attribute "feat_idx": the left child contains values larger or equal than "pos".
+            # Arguments:
+                   :param parent: Node. The parent node on which apply the split.
+                   :param feat_idx: int. Index of the attribute considered for the split.
+                   :param pos: float. Split value.
+                   :param minleaf: int. See "tree_grow".
+                   return: tuple. Tuple of two elements of class Node, containinf left adn right children. If no split is performed returns (None,None)."""
         if len(parent.features[parent.features[:, feat_idx] >= pos]) < minleaf or len(
                 parent.features[parent.features[:, feat_idx] < pos]) < minleaf:
             return (None, None)
