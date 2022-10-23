@@ -4,6 +4,7 @@ import csv
 import string
 import re
 import nltk
+import numpy as np
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from nltk.corpus import stopwords
@@ -12,6 +13,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import confusion_matrix, accuracy_score, recall_score, precision_score, f1_score
 
 
 def read_text(wd, folds, class_label):
@@ -83,8 +85,8 @@ use_idf = True
 
 vector = TfidfVectorizer(max_features=max_features,
                          ngram_range=ngram_range,
-                         min_df=1,
-                         max_df=1.0,
+                         min_df=6, # if they are present in less than the 10% of the sample then not considered
+                         max_df=320, # if they appear in more than half of the docoments they are not considered
                          use_idf=use_idf)
 
 train_vec = vector.fit_transform(train_prep['review'])
@@ -94,14 +96,18 @@ test_vec = vector.transform(test_prep['review'])
 os.chdir(path)
 train_df = pd.DataFrame(train_vec.toarray().transpose(), index=vector.get_feature_names())
 train_df.columns = ['Rev ' + str(i) for i, _ in enumerate(train_df.columns)]
-train_df = pd.concat([train_df.T, train_prep['class']], axis=1)
+train_prep=train_prep.reset_index()
+train_df=train_df.T
+train_df['class']=np.asarray(train_prep['class'])
 train_df.to_csv('train_reviews_document_term.csv')
 
 # Test set: Construct document-term matrix 
 test_df = pd.DataFrame(test_vec.toarray().transpose(), index=vector.get_feature_names())
 test_df.columns = ['Rev ' + str(i) for i, _ in enumerate(test_df.columns)]
-test_df = pd.concat([test_df.T, test_prep['class']], axis=1)
+test_df=test_df.T
+test_df['class']=np.asarray(test_prep['class'])
 test_df.to_csv('test_reviews_document_term.csv')
+
 
 # term_document_matrix['total_count'] = term_document_matrix.sum(axis=1)
 
@@ -129,53 +135,65 @@ test_x = test_df.drop('class', axis=1)
 
 """ Define the parameter values and distributions"""
 # Naive Bayes
-smooth = list(range(start=0, stop=1, step=0.01))
+smooth = np.arange(0, 1, 0.01)
 
 # Logistic regression
-C = list(range(start=1, stop=100, step=1))
-reg = ['l1', 'l2', 'elasticnet']
+C =np.arange(1, 100, 1)
+reg = ['l1', 'l2', 'elasticnet']  # not used
 
 # Decision tree
-ccp = list(range(start=0, stop=1, step=0.01))
+ccp = np.arange(0, 1, 0.01)
 imp = ['gini', 'entropy', 'log_loss']
 
 # Random Forest
-m = list(range(start=100, stop=1000, step=1))
-nfeat = list
+m=np.arange(100, 1000, 1)
+nfeat = ['sqrt', 'log2']         # sqrt or log2 of total numer of features
 
 param_dist_nb = dict(alpha=smooth)
 param_dist_lr = dict(C=C)
-param_dist_dt = dict(ccp_alpha=ccp, criterion=imp)
-param_dist_rf = dict(ccp_alpha=ccp, max_features=nfeat, n_estimators=m, criterion=imp)
+param_dist_dt = dict(ccp_alpha=ccp)#, criterion=imp)
+param_dist_dt2 = dict(min_samples_split=np.arange(2,10,1), min_samples_leaf=np.arange(1,10,1)) # using min_leaf and n_min
+param_dist_rf = dict(ccp_alpha=ccp, max_features=nfeat, n_estimators=m)   #, criterion=imp)
 
 # Initialize models
 nb = MultinomialNB()
-lr = LogisticRegression(solver='saga',
+lr = LogisticRegression(penalty='l1',
+                        solver='saga',
                         random_state=5,
                         n_jobs=os.cpu_count(),
-                        max_iterint=250)
-dt = DecisionTreeClassifier(random_state=5,
-                            n_jobs=os.cpu_count())
+                        max_iter=300)
+dt = DecisionTreeClassifier(random_state=5)  #,n_jobs=os.cpu_count())
 rf = RandomForestClassifier(criterion='gini',
-                            random_state=5,
-                            n_jobs=os.cpu_count())
-models = [nb, lr, dt, rf]
-param_dists = [param_dist_nb, param_dist_lr, param_dist_dt, param_dist_rf]
+                            random_state=5, n_jobs=os.cpu_count())
+models = [nb,  dt, rf] #[lr,
+param_dists = [param_dist_nb, param_dist_dt2, param_dist_rf] # param_dist_lr,
+model_names=['NB','DT','RF'] # 'LR',
 
-# Train
+
+# Train anf fit the model with best parameters.
+# Test and print the required measures of performances
 selection = []
 for i, _ in enumerate(models):
     rand = RandomizedSearchCV(models[i],
                               param_dists[i],
-                              cv=2,  # 20
-                              scoring=['accuracy', 'f1'],
-                              n_iter=1,  # 100
+                              cv=5,  # 20
+                              scoring='f1', # 'accuracy'; using both gives problems with refit (need to chose according to which score to refit)
+                              n_iter=10,  # 100
                               random_state=5,
                               return_train_score=False,
-                              verbose=1)
+                              verbose=1,
+                              refit=True)
+
     rand.fit(train_x, train_y)
-    pd.DataFrame(rand.cv_results_)[['mean_test_score', 'std_test_score', 'params']]
+    pred_y=rand.predict(test_x)
+    prob_y= rand.predict_proba(test_x)
+    print(f'best estimator: {rand.best_estimator_}, score of best estimator: {rand.best_score_}, best parameters setting: {rand.best_params_} ')
+    print(f'model: {model_names[i]}, accuracy: {accuracy_score(test_y,pred_y)}, precision: {precision_score(test_y,pred_y)}, recall: {recall_score(test_y, pred_y)}, F1 : {f1_score(test_y,pred_y)}')
+    
+    # d=pd.DataFrame(rand.cv_results_)
+    # pd.DataFrame(rand.cv_results_)[['mean_test_score', 'std_test_score', 'params']]
+    # selection.append(f'{models[i]}: Best parameters {rand.best_score_}, best score  {rand.best_score_}')
 
-    selection.append(f'{models[i]}: Best parameters {rand.best_score_}, best score  {rand.best_score_}')
+# print(selection)
 
-selection
+print()
