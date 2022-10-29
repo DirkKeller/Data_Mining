@@ -9,7 +9,7 @@ import random
 import matplotlib.pyplot as plt
 from sklearn.pipeline import Pipeline
 from sklearn.pipeline import make_pipeline
-
+from statsmodels.stats.contingency_tables import mcnemar
 from sklearn.feature_extraction.text import TfidfVectorizer
 from nltk.corpus import stopwords
 from sklearn.model_selection import RandomizedSearchCV
@@ -130,39 +130,52 @@ path = os.path.join(wd, "negative_polarity")
 os.chdir(path)
 train_df = pd.read_csv('train_reviews_document_term.csv', header=0, index_col=0)
 test_df = pd.read_csv('test_reviews_document_term.csv', header=0, index_col=0)
-
 train_y = train_df['class']
 test_y = test_df['class']
 train_x = train_df.drop('class', axis=1)
 test_x = test_df.drop('class', axis=1)
 
+# Mutual information criterios for feature selection
 mic=mutual_info_classif(train_x, train_y, random_state=5)
+
 
 # Training set. Feature selection with Mutal information Criterion
 # Exclude features that are independent of the class and sort the trainings data based on the mic score
 
-#TODO include everything with mic>0.1, make histogram to show why it's a good value
+#TODO include everything with mic>0.01, make histogram to show why it's a good value
 #TODO include a histogram of all words, without infrequent terms and stop words and without mic<0.1
 #TODO show the top 5 most relevant words for each class seperatly
 #TODO add the statistical test for the models (whether they are significantly better)
 #TODO crossta
-train_x_mic=train_x.loc[:,mic>0]
-train_x_mic.loc['mic']=mic[mic>0]
+train_x_mic=train_x.loc[:,mic>0.01]
+train_x_mic.loc['mic']=mic[mic>0.01]
 train_x_mic.sort_values(by=['mic'], inplace=True, axis=1, ascending=False)
 train_x=train_x_mic.drop('mic', axis=0)
 
 # Test set. Feature selection with Mutal information Criterion
 # Exclude features that are independent of the class and sort the trainings data based on the mic score
-test_x_mic=test_x.loc[:,mic>0]
-test_x_mic.loc['mic']=mic[mic>0]
+test_x_mic=test_x.loc[:,mic>0.01]
+test_x_mic.loc['mic']=mic[mic>0.01]
 test_x_mic.sort_values(by=['mic'], inplace=True, axis=1, ascending=False)
 test_x=test_x_mic.drop('mic', axis=0)
+
+"""Histograms"""
+# histogram of mic
+plt.hist(mic)
+plt.show()
+
+# histogram of train dataset, without considerign too frequent and too infrequent words, as well as the less informative ones
+
+t=train_x.replace(0,np.nan)
+t.plot.hist()
+plt.show()
+
 
 """ Define the parameter values and distributions"""
 # Naive Bayes
 smooth = np.arange(0, 1, 0.01)
 n_iter = 50
-micefeat_range = range(250, train_x_mic.shape[1]-1)
+micefeat_range = range(250, train_x.shape[1]-1)
 
 # Logistic regression
 C =np.arange(1, 300, 1)
@@ -196,13 +209,12 @@ models = [ dt, dt, rf, lr]
 param_dists = [ param_dist_dt, param_dist_dt2, param_dist_rf, param_dist_lr]
 model_names=['DT_rule', 'DT_ccp','RF','LR']
 
-# Train anf fit the model with best parameters.
-# Test and print the required measures of performances
-
-
+# # Train anf fit the model with best parameters.
+# # Test and print the required measures of performances
 
 
 # selection = []
+# model_predictions=[]
 # for i, _ in enumerate(models):
     
 #     rand = RandomizedSearchCV(models[i],
@@ -216,25 +228,24 @@ model_names=['DT_rule', 'DT_ccp','RF','LR']
 #                               refit=True)
 
 #     rand.fit(train_x, train_y)
-#     pred_y=rand.predict(test_x)
-#     prob_y= rand.predict_proba(test_x)
-#     print(f'best estimator: {rand.best_estimator_}, score of best estimator: {rand.best_score_}, best parameters setting: {rand.best_params_} ')
+#     pred_y=rand.predict(test_x)    
+#     model_predictions.append(pred_y)
+#     # print(f'best estimator: {rand.best_estimator_}, score of best estimator: {rand.best_score_}, best parameters setting: {rand.best_params_} ')
 #     print(f'model: {model_names[i]}, accuracy: {accuracy_score(test_y,pred_y)}, precision: {precision_score(test_y,pred_y)}, recall: {recall_score(test_y, pred_y)}, F1 : {f1_score(test_y,pred_y)}')
+#     print(confusion_matrix(test_y, pred_y))
+#     # d=pd.DataFrame(rand.cv_results_)
+#     # pd.DataFrame(rand.cv_results_)[['mean_test_score', 'std_test_score', 'params']]
+#     # selection.append(f'{models[i]}: Best parameters {rand.best_score_}, best score  {rand.best_score_}')
     
-    # d=pd.DataFrame(rand.cv_results_)
-    # pd.DataFrame(rand.cv_results_)[['mean_test_score', 'std_test_score', 'params']]
-    # selection.append(f'{models[i]}: Best parameters {rand.best_score_}, best score  {rand.best_score_}')
 
 
-
-
+model_names.append('NB')
 micfeat=random.choices(micefeat_range, k=n_iter)
 best_nb=None
 score = []
 params = []
 for i in range(n_iter):
     train_x_nb = train_x.iloc[:, 0:micfeat[i]]
-
     rand = RandomizedSearchCV(nb,
                               param_dist_nb,
                               cv=5,  # 20
@@ -249,13 +260,23 @@ for i in range(n_iter):
     score.append(rand.best_score_)
     params.append([rand.best_params_, micfeat[i]])
    
-
-
-#print(f'best estimator: {rand.best_estimator_}, score of best estimator: {rand.best_score_}, best parameters setting: {rand.best_params_} ')
 best_params=params[score.index(max(score))]
-nb(alpha=best_params[0]).fit(train_x.loc[:,best_params[1]],train_y)
-#print(f'best estimator: {rand.best_estimator_}, score of best estimator: {rand.best_score_}, best parameters setting: {rand.best_params_} ')
+best_nb = MultinomialNB(alpha=best_params[0])
+train_x_nb=train_x.iloc[:,0:best_params[1]]
+best_nb.fit(train_x_nb, train_y)
 
-pred_y=best_nb.predict(test_x)
-prob_y= best_nb.predict_proba(test_x)
-print(f'model: NB, accuracy: {accuracy_score(test_y,pred_y)}, precision: {precision_score(test_y,pred_y)}, recall: {recall_score(test_y, pred_y)}, F1 : {f1_score(test_y,pred_y)}')
+model_predictions.append(pred_y)
+
+print(f'model: {model_names[-1]}, accuracy: {accuracy_score(test_y,pred_y)}, precision: {precision_score(test_y,pred_y)}, recall: {recall_score(test_y, pred_y)}, F1 : {f1_score(test_y,pred_y)}')
+print(confusion_matrix(test_y, pred_y))
+
+
+for i in range(len(model_predictions)):
+    for j in range(len(model_predictions)):
+        if i<j: 
+            table=pd.crosstab(model_predictions[i],model_predictions[j])
+            print(f"cross table of {model_names[i]} with {model_names[j]}: {table}")
+            result = mcnemar(table, exact=True)
+            print(f"MCNEMAR TEST--> statistic value: {result.statistic}, pvalue: {result.pvalue} ")
+
+
