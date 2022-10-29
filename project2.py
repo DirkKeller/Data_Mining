@@ -20,6 +20,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix, accuracy_score, recall_score, precision_score, f1_score
 from sklearn.feature_selection import mutual_info_classif
 
+
 def read_text(wd, folds, class_label):
     start = True
     for i in folds:  # 6
@@ -88,8 +89,8 @@ max_features = 1000
 use_idf = True
 
 vector = TfidfVectorizer(ngram_range=ngram_range,
-                         min_df=6, # if they are present in less than the 10% of the sample then not considered
-                         max_df=320, # if they appear in more than half of the documents they are not considered
+                         min_df=6,  # if they are present in less than the 10% of the sample then not considered
+                         max_df=320,  # if they appear in more than half of the documents they are not considered
                          use_idf=use_idf)
 
 train_vec = vector.fit_transform(train_prep['review'])
@@ -97,20 +98,19 @@ test_vec = vector.transform(test_prep['review'])
 
 # Train set: Construct document-term matrix
 os.chdir(path)
-train_df = pd.DataFrame(train_vec.toarray().transpose(), index=vector.get_feature_names())
+train_df = pd.DataFrame(train_vec.toarray().transpose(), index=vector.get_feature_names_out())
 train_df.columns = ['Rev ' + str(i) for i, _ in enumerate(train_df.columns)]
-train_prep=train_prep.reset_index()
-train_df=train_df.T
-train_df['class']=np.asarray(train_prep['class'])
+train_prep = train_prep.reset_index()
+train_df = train_df.T
+train_df['class'] = np.asarray(train_prep['class'])
 train_df.to_csv('train_reviews_document_term.csv')
 
 # Test set: Construct document-term matrix 
-test_df = pd.DataFrame(test_vec.toarray().transpose(), index=vector.get_feature_names())
+test_df = pd.DataFrame(test_vec.toarray().transpose(), index=vector.get_feature_names_out())
 test_df.columns = ['Rev ' + str(i) for i, _ in enumerate(test_df.columns)]
-test_df=test_df.T
-test_df['class']=np.asarray(test_prep['class'])
+test_df = test_df.T
+test_df['class'] = np.asarray(test_prep['class'])
 test_df.to_csv('test_reviews_document_term.csv')
-
 
 # term_document_matrix['total_count'] = term_document_matrix.sum(axis=1)
 
@@ -136,87 +136,78 @@ train_x = train_df.drop('class', axis=1)
 test_x = test_df.drop('class', axis=1)
 
 # Mutual information criterios for feature selection
-mic=mutual_info_classif(train_x, train_y, random_state=5)
-
+mic = mutual_info_classif(train_x, train_y, random_state=5)
 
 # Training set. Feature selection with Mutal information Criterion
 # Exclude features that are independent of the class and sort the trainings data based on the mic score
-
-#TODO include everything with mic>0.01, make histogram to show why it's a good value
-#TODO include a histogram of all words, without infrequent terms and stop words and without mic<0.1
-#TODO show the top 5 most relevant words for each class seperatly
-#TODO add the statistical test for the models (whether they are significantly better)
-#TODO crossta
-train_x_mic=train_x.loc[:,mic>0.01]
-train_x_mic.loc['mic']=mic[mic>0.01]
+train_x_mic = train_x.loc[:, mic > 0.01]
+train_x_mic.loc['mic'] = mic[mic > 0.01]
 train_x_mic.sort_values(by=['mic'], inplace=True, axis=1, ascending=False)
-train_x=train_x_mic.drop('mic', axis=0)
+train_x = train_x_mic.drop('mic', axis=0)
 
 # Test set. Feature selection with Mutal information Criterion
 # Exclude features that are independent of the class and sort the trainings data based on the mic score
-test_x_mic=test_x.loc[:,mic>0.01]
-test_x_mic.loc['mic']=mic[mic>0.01]
+test_x_mic = test_x.loc[:, mic > 0.01]
+test_x_mic.loc['mic'] = mic[mic > 0.01]
 test_x_mic.sort_values(by=['mic'], inplace=True, axis=1, ascending=False)
-test_x=test_x_mic.drop('mic', axis=0)
+test_x = test_x_mic.drop('mic', axis=0)
 
 """Histograms"""
 # histogram of mic
 plt.hist(mic)
-plt.show()
+#plt.show()
 
 # histogram of train dataset, without considerign too frequent and too infrequent words, as well as the less informative ones
-
-t=train_x.replace(0,np.nan)
-t.plot.hist()
-plt.show()
-
+#
+# t = train_x.replace(0, np.nan)
+# t.plot.hist()
+# plt.show()
 
 """ Define the parameter values and distributions"""
 # Naive Bayes
-smooth = np.arange(0, 1, 0.01)
+smooth = np.arange(0.01, 1, 0.01)
 n_iter = 50
-micefeat_range = range(250, train_x.shape[1]-1)
+micefeat_range = range(250, train_x.shape[1] - 1)
 
 # Logistic regression
-C =np.arange(1, 300, 1)
+C = np.arange(1, 300, 1)
 
 # Decision tree
 ccp = np.arange(0, 1, 0.01)
 imp = ['gini', 'entropy', 'log_loss']
 
 # Random Forest
-m=np.arange(100, 500, 1)
-nfeat = np.arange(1,int((train_x.shape[1])/2),1)   
+m = np.arange(100, 500, 1)
+nfeat = np.arange(1, int((train_x.shape[1]) / 2), 1)
 
 param_dist_nb = dict(alpha=smooth)
 param_dist_lr = dict(C=C)
-param_dist_dt = dict(ccp_alpha=ccp)#, criterion=imp)
-param_dist_dt2 = dict(min_samples_split=np.arange(2,10,1), min_samples_leaf=np.arange(1,10,1)) # using min_leaf and n_min
-param_dist_rf = dict(ccp_alpha=ccp, max_features=nfeat, n_estimators=m) #, criterion=imp)
+param_dist_dt = dict(ccp_alpha=ccp)  # , criterion=imp)
+param_dist_dt2 = dict(min_samples_split=np.arange(2, 10, 1),
+                      min_samples_leaf=np.arange(1, 10, 1))  # using min_leaf and n_min
+param_dist_rf = dict(ccp_alpha=ccp,
+                     max_features=nfeat,
+                     n_estimators=m)  # , criterion=imp)
 
 # Initialize models
 nb = MultinomialNB()
 lr = LogisticRegression(penalty='l1',
                         solver='liblinear',
                         random_state=5,
-                        # n_jobs=os.cpu_count(),
                         max_iter=300)
-dt = DecisionTreeClassifier(random_state=5)  #,n_jobs=os.cpu_count())
+dt = DecisionTreeClassifier(random_state=5)  # ,n_jobs=os.cpu_count())
 rf = RandomForestClassifier(criterion='gini',
                             random_state=5,
                             n_jobs=os.cpu_count())
-models = [ dt, dt, rf, lr]
-param_dists = [ param_dist_dt, param_dist_dt2, param_dist_rf, param_dist_lr]
-model_names=['DT_rule', 'DT_ccp','RF','LR']
+models = [dt, dt, rf, lr]
+param_dists = [param_dist_dt, param_dist_dt2, param_dist_rf, param_dist_lr]
+model_names = ['DT_rule', 'DT_ccp', 'RF', 'LR']
 
 # # Train anf fit the model with best parameters.
-# # Test and print the required measures of performances
-
-
 # selection = []
 # model_predictions=[]
 # for i, _ in enumerate(models):
-    
+
 #     rand = RandomizedSearchCV(models[i],
 #                               param_dists[i],
 #                               cv=5,  # 20
@@ -228,6 +219,8 @@ model_names=['DT_rule', 'DT_ccp','RF','LR']
 #                               refit=True)
 
 #     rand.fit(train_x, train_y)
+
+# # Test and print the required measures of performances
 #     pred_y=rand.predict(test_x)    
 #     model_predictions.append(pred_y)
 #     # print(f'best estimator: {rand.best_estimator_}, score of best estimator: {rand.best_score_}, best parameters setting: {rand.best_params_} ')
@@ -236,12 +229,10 @@ model_names=['DT_rule', 'DT_ccp','RF','LR']
 #     # d=pd.DataFrame(rand.cv_results_)
 #     # pd.DataFrame(rand.cv_results_)[['mean_test_score', 'std_test_score', 'params']]
 #     # selection.append(f'{models[i]}: Best parameters {rand.best_score_}, best score  {rand.best_score_}')
-    
-
 
 model_names.append('NB')
-micfeat=random.choices(micefeat_range, k=n_iter)
-best_nb=None
+micfeat = random.choices(micefeat_range, k=n_iter)
+best_nb = None
 score = []
 params = []
 for i in range(n_iter):
@@ -249,34 +240,44 @@ for i in range(n_iter):
     rand = RandomizedSearchCV(nb,
                               param_dist_nb,
                               cv=5,  # 20
-                              scoring='f1', 
+                              scoring='f1',
                               n_iter=1,  # 200
                               random_state=5,
                               return_train_score=True,
-                              verbose=1,
+                              verbose=0,
                               refit=True)
 
     rand.fit(train_x_nb, train_y)
     score.append(rand.best_score_)
     params.append([rand.best_params_, micfeat[i]])
-   
-best_params=params[score.index(max(score))]
-best_nb = MultinomialNB(alpha=best_params[0])
-train_x_nb=train_x.iloc[:,0:best_params[1]]
-best_nb.fit(train_x_nb, train_y)
+
+best_param = params[score.index(max(score))]
+train_x_best_nb = train_x.iloc[:, 0:best_param[1]]
+
+best_nb = MultinomialNB(alpha=best_param[0]['alpha'])
+best_nb.fit(train_x_best_nb, train_y)
 
 model_predictions.append(pred_y)
 
-print(f'model: {model_names[-1]}, accuracy: {accuracy_score(test_y,pred_y)}, precision: {precision_score(test_y,pred_y)}, recall: {recall_score(test_y, pred_y)}, F1 : {f1_score(test_y,pred_y)}')
+print(f'model: {model_names[-1]},'
+      f' accuracy: {accuracy_score(test_y, pred_y)},'
+      f' precision: {precision_score(test_y, pred_y)},'
+      f' recall: {recall_score(test_y, pred_y)},'
+      f' F1 : {f1_score(test_y, pred_y)}')
 print(confusion_matrix(test_y, pred_y))
-
 
 for i in range(len(model_predictions)):
     for j in range(len(model_predictions)):
-        if i<j: 
-            table=pd.crosstab(model_predictions[i],model_predictions[j])
+        if i < j:
+            table = pd.crosstab(model_predictions[i], model_predictions[j])
             print(f"cross table of {model_names[i]} with {model_names[j]}: {table}")
             result = mcnemar(table, exact=True)
             print(f"MCNEMAR TEST--> statistic value: {result.statistic}, pvalue: {result.pvalue} ")
 
 
+
+# TODO include everything with mic>0.01, make histogram to show why it's a good value
+# TODO include a histogram of all words, without infrequent terms and stop words and without mic<0.1
+# TODO show the top 5 most relevant words for each class seperatly
+# TODO add the statistical test for the models (whether they are significantly better)
+# TODO crosstable

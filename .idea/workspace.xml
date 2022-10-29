@@ -3,7 +3,6 @@
   <component name="ChangeListManager">
     <list default="true" id="32296d78-a56e-421c-aae1-0c417c2f2492" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/negative_polarity/reviews_document_term.csv" beforeDir="false" afterPath="$PROJECT_DIR$/negative_polarity/reviews_document_term.csv" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/project2.py" beforeDir="false" afterPath="$PROJECT_DIR$/project2.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -89,23 +88,13 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/project2.py</url>
-          <line>180</line>
-          <option name="timeStamp" value="15" />
+          <line>256</line>
+          <option name="timeStamp" value="61" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/project2.py</url>
-          <line>122</line>
-          <option name="timeStamp" value="31" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/project2.py</url>
-          <line>103</line>
-          <option name="timeStamp" value="34" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/project2.py</url>
-          <line>96</line>
-          <option name="timeStamp" value="39" />
+          <line>203</line>
+          <option name="timeStamp" value="64" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
