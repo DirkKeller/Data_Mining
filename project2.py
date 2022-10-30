@@ -85,7 +85,6 @@ test_prep = preprocess_sentence(test_data)
 # Vectorize the data excluding stopwords
 stop = stopwords.words('english')
 ngram_range = (1, 2)
-max_features = 1000
 use_idf = True
 
 vector = TfidfVectorizer(ngram_range=ngram_range,
@@ -98,15 +97,16 @@ test_vec = vector.transform(test_prep['review'])
 
 # Train set: Construct document-term matrix
 os.chdir(path)
-train_df = pd.DataFrame(train_vec.toarray().transpose(), index=vector.get_feature_names_out())
+train_df = pd.DataFrame(train_vec.toarray().transpose(), index=vector.get_feature_names())
 train_df.columns = ['Rev ' + str(i) for i, _ in enumerate(train_df.columns)]
 train_prep = train_prep.reset_index()
 train_df = train_df.T
+train_df.columns= vector.get_feature_names()
 train_df['class'] = np.asarray(train_prep['class'])
 train_df.to_csv('train_reviews_document_term.csv')
 
 # Test set: Construct document-term matrix 
-test_df = pd.DataFrame(test_vec.toarray().transpose(), index=vector.get_feature_names_out())
+test_df = pd.DataFrame(test_vec.toarray().transpose(), index=vector.get_feature_names())
 test_df.columns = ['Rev ' + str(i) for i, _ in enumerate(test_df.columns)]
 test_df = test_df.T
 test_df['class'] = np.asarray(test_prep['class'])
@@ -154,11 +154,10 @@ test_x = test_x_mic.drop('mic', axis=0)
 
 """Histograms"""
 # histogram of mic
-plt.hist(mic)
-#plt.show()
+# plt.hist(mic)
+# plt.show()
 
 # histogram of train dataset, without considerign too frequent and too infrequent words, as well as the less informative ones
-#
 # t = train_x.replace(0, np.nan)
 # t.plot.hist()
 # plt.show()
@@ -204,60 +203,94 @@ param_dists = [param_dist_dt, param_dist_dt2, param_dist_rf, param_dist_lr]
 model_names = ['DT_rule', 'DT_ccp', 'RF', 'LR']
 
 # # Train anf fit the model with best parameters.
-# selection = []
-# model_predictions=[]
-# for i, _ in enumerate(models):
+selection = []
+model_predictions=[]
+best_models=[]
+for i, _ in enumerate(models):
 
-#     rand = RandomizedSearchCV(models[i],
-#                               param_dists[i],
-#                               cv=5,  # 20
-#                               scoring='f1', 
-#                               n_iter=50,  # 200
-#                               random_state=5,
-#                               return_train_score=False,
-#                               verbose=1,
-#                               refit=True)
-
-#     rand.fit(train_x, train_y)
-
-# # Test and print the required measures of performances
-#     pred_y=rand.predict(test_x)    
-#     model_predictions.append(pred_y)
-#     # print(f'best estimator: {rand.best_estimator_}, score of best estimator: {rand.best_score_}, best parameters setting: {rand.best_params_} ')
-#     print(f'model: {model_names[i]}, accuracy: {accuracy_score(test_y,pred_y)}, precision: {precision_score(test_y,pred_y)}, recall: {recall_score(test_y, pred_y)}, F1 : {f1_score(test_y,pred_y)}')
-#     print(confusion_matrix(test_y, pred_y))
-#     # d=pd.DataFrame(rand.cv_results_)
-#     # pd.DataFrame(rand.cv_results_)[['mean_test_score', 'std_test_score', 'params']]
-#     # selection.append(f'{models[i]}: Best parameters {rand.best_score_}, best score  {rand.best_score_}')
-
-model_names.append('NB')
-micfeat = random.choices(micefeat_range, k=n_iter)
-best_nb = None
-score = []
-params = []
-for i in range(n_iter):
-    train_x_nb = train_x.iloc[:, 0:micfeat[i]]
-    rand = RandomizedSearchCV(nb,
-                              param_dist_nb,
+    rand = RandomizedSearchCV(models[i],
+                              param_dists[i],
                               cv=5,  # 20
-                              scoring='f1',
-                              n_iter=1,  # 200
+                              scoring='f1', 
+                              n_iter=50,  # 200
                               random_state=5,
-                              return_train_score=True,
-                              verbose=0,
+                              return_train_score=False,
+                              verbose=1,
                               refit=True)
 
-    rand.fit(train_x_nb, train_y)
-    score.append(rand.best_score_)
-    params.append([rand.best_params_, micfeat[i]])
+    rand.fit(train_x, train_y)
+    best_models.append(rand.best_estimator_)
 
-best_param = params[score.index(max(score))]
-train_x_best_nb = train_x.iloc[:, 0:best_param[1]]
+    # Test and print the required measures of performances
+    pred_y=rand.predict(test_x)    
+    model_predictions.append(pred_y)
+    print(f'model: {model_names[i]}, accuracy: {accuracy_score(test_y,pred_y)}, precision: {precision_score(test_y,pred_y)}, recall: {recall_score(test_y, pred_y)}, F1 : {f1_score(test_y,pred_y)}')
+    print(confusion_matrix(test_y, pred_y))
 
-best_nb = MultinomialNB(alpha=best_param[0]['alpha'])
-best_nb.fit(train_x_best_nb, train_y)
+    # print(f'best estimator: {rand.best_estimator_}, score of best estimator: {rand.best_score_}, best parameters setting: {rand.best_params_} ')
+    # d=pd.DataFrame(rand.cv_results_)
+    # pd.DataFrame(rand.cv_results_)[['mean_test_score', 'std_test_score', 'params']]
+    # selection.append(f'{models[i]}: Best parameters {rand.best_score_}, best score  {rand.best_score_}')
 
-model_predictions.append(pred_y)
+
+# Get the five terms that most support classification
+# for DecisionTreeClassifiers use ".feature_importances_"
+# for RandomForestClassifiers use ".feature_importances_"
+# for LogisticRegression use ".coef_" 
+# for MultinomialNB use ".feature_log_prob_" 
+
+# not sure what to do next
+p_dt1 = best_models[0].feature_importances_
+p_dt2 = best_models[1].feature_importances_
+p_rf = best_models[2].feature_importances_
+p_lr = best_models[3].coef_
+
+
+# model_names.append('NB')
+# micfeat = random.choices(micefeat_range, k=n_iter)
+# best_nb = None
+# score = []
+# params = []
+# for i in range(n_iter):
+#     train_x_nb = train_x.iloc[:, 0:micfeat[i]]
+#     rand = RandomizedSearchCV(nb,
+#                               param_dist_nb,
+#                               cv=5,  # 20
+#                               scoring='f1',
+#                               n_iter=1,  # 200
+#                               random_state=5,
+#                               return_train_score=True,
+#                               verbose=0,
+#                               refit=True)
+
+#     rand.fit(train_x_nb, train_y)
+#     score.append(rand.best_score_)
+#     params.append([rand.best_params_, micfeat[i]])
+
+# best_param = params[score.index(max(score))]
+# train_x_best_nb = train_x.iloc[:, 0:best_param[1]]
+# test_x_best_nb = test_x.iloc[:, 0:best_param[1]]
+
+# best_nb = MultinomialNB(alpha=best_param[0]['alpha'])
+# best_models.append(best_nb)
+# best_nb.fit(train_x_best_nb, train_y)
+# pred_y = best_nb.predict(test_x_best_nb)
+# model_predictions.append(pred_y)
+
+
+# # top 5 terms supporting truthful/deceptive
+# p = best_nb.feature_log_prob_
+# prob_truth = p[0,:]
+# prob_fake = p[1,:]
+# index_top5_truth = np.flip(np.argsort(prob_truth))[:5]
+# index_top5_fake = np.flip(np.argsort(prob_fake))[:5]
+# top5_terms_truth = test_x_best_nb.columns[index_top5_truth]
+# top5_terms_fake = test_x_best_nb.columns[index_top5_fake]
+# print(f"The five terms that most support a truthful review for NB are: {top5_terms_truth}")
+# print(f"The five terms that most support a deceptive review for NB are: {top5_terms_fake}")
+
+
+
 
 print(f'model: {model_names[-1]},'
       f' accuracy: {accuracy_score(test_y, pred_y)},'
@@ -272,7 +305,7 @@ for i in range(len(model_predictions)):
             table = pd.crosstab(model_predictions[i], model_predictions[j])
             print(f"cross table of {model_names[i]} with {model_names[j]}: {table}")
             result = mcnemar(table, exact=True)
-            print(f"MCNEMAR TEST--> statistic value: {result.statistic}, pvalue: {result.pvalue} ")
+            print(f"MCNEMAR TEST--> statistics value: {result.statistic}, pvalue: {result.pvalue} ")
 
 
 
