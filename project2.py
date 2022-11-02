@@ -89,8 +89,9 @@ use_idf = True
 
 vector = TfidfVectorizer(ngram_range=ngram_range,
                          min_df=6,  # if they are present in less than the 10% of the sample then not considered
-                         max_df=320,  # if they appear in more than half of the documents they are not considered
-                         use_idf=use_idf)
+                         max_df=400,  # if they appear in more than half of the documents they are not considered
+                         use_idf=use_idf,
+                         stop_words=stop)
 
 train_vec = vector.fit_transform(train_prep['review'])
 test_vec = vector.transform(test_prep['review'])
@@ -200,32 +201,32 @@ rf = RandomForestClassifier(criterion='gini',
                             n_jobs=os.cpu_count())
 models = [dt, dt, rf, lr]
 param_dists = [param_dist_dt, param_dist_dt2, param_dist_rf, param_dist_lr]
-model_names = ['DT_rule', 'DT_ccp', 'RF', 'LR']
+model_names = ['DT_ccp', 'DT_rule', 'RF', 'LR']
 
 # # Train anf fit the model with best parameters.
 selection = []
 model_predictions=[]
 best_models=[]
-for i, _ in enumerate(models):
+# for i, _ in enumerate(models):
 
-    rand = RandomizedSearchCV(models[i],
-                              param_dists[i],
-                              cv=5,  # 20
-                              scoring='f1', 
-                              n_iter=50,  # 200
-                              random_state=5,
-                              return_train_score=False,
-                              verbose=1,
-                              refit=True)
+#     rand = RandomizedSearchCV(models[i],
+#                               param_dists[i],
+#                               cv=5,  # 20
+#                               scoring='f1', 
+#                               n_iter=50,  # 200
+#                               random_state=5,
+#                               return_train_score=False,
+#                               verbose=1,
+#                               refit=True)
 
-    rand.fit(train_x, train_y)
-    best_models.append(rand.best_estimator_)
+#     rand.fit(train_x, train_y)
+#     best_models.append(rand.best_estimator_)
 
-    # Test and print the required measures of performances
-    pred_y=rand.predict(test_x)    
-    model_predictions.append(pred_y)
-    print(f'model: {model_names[i]}, accuracy: {accuracy_score(test_y,pred_y)}, precision: {precision_score(test_y,pred_y)}, recall: {recall_score(test_y, pred_y)}, F1 : {f1_score(test_y,pred_y)}')
-    print(confusion_matrix(test_y, pred_y))
+#     # Test and print the required measures of performances
+#     pred_y=rand.predict(test_x)    
+#     model_predictions.append(pred_y)
+#     print(f'model: {model_names[i]}, accuracy: {accuracy_score(test_y,pred_y)}, precision: {precision_score(test_y,pred_y)}, recall: {recall_score(test_y, pred_y)}, F1 : {f1_score(test_y,pred_y)}')
+#     print(confusion_matrix(test_y, pred_y))
 
     # print(f'best estimator: {rand.best_estimator_}, score of best estimator: {rand.best_score_}, best parameters setting: {rand.best_params_} ')
     # d=pd.DataFrame(rand.cv_results_)
@@ -240,48 +241,55 @@ for i, _ in enumerate(models):
 # for MultinomialNB use ".feature_log_prob_" 
 
 # not sure what to do next
-p_dt1 = best_models[0].feature_importances_
-p_dt2 = best_models[1].feature_importances_
-p_rf = best_models[2].feature_importances_
-p_lr = best_models[3].coef_
+# p_dt1 = best_models[0].feature_importances_
+# p_dt2 = best_models[1].feature_importances_
+# p_rf = best_models[2].feature_importances_
+# p_lr = best_models[3].coef_
 
 
-# model_names.append('NB')
-# micfeat = random.choices(micefeat_range, k=n_iter)
-# best_nb = None
-# score = []
-# params = []
-# for i in range(n_iter):
-#     train_x_nb = train_x.iloc[:, 0:micfeat[i]]
-#     rand = RandomizedSearchCV(nb,
-#                               param_dist_nb,
-#                               cv=5,  # 20
-#                               scoring='f1',
-#                               n_iter=1,  # 200
-#                               random_state=5,
-#                               return_train_score=True,
-#                               verbose=0,
-#                               refit=True)
+model_names.append('NB')
+micfeat = random.choices(micefeat_range, k=n_iter)
+best_nb = None
+score = []
+params = []
+for i in range(n_iter):
+    train_x_nb = train_x.iloc[:, 0:micfeat[i]]
+    rand = RandomizedSearchCV(nb,
+                              param_dist_nb,
+                              cv=10,  # 20
+                              scoring='f1',
+                              n_iter=1,  
+                              random_state=5,
+                              return_train_score=True,
+                              verbose=0,
+                              refit=True)
 
-#     rand.fit(train_x_nb, train_y)
-#     score.append(rand.best_score_)
-#     params.append([rand.best_params_, micfeat[i]])
+    rand.fit(train_x_nb, train_y)
+    score.append(rand.best_score_)
+    params.append([rand.best_params_, micfeat[i]])
 
-# best_param = params[score.index(max(score))]
-# train_x_best_nb = train_x.iloc[:, 0:best_param[1]]
-# test_x_best_nb = test_x.iloc[:, 0:best_param[1]]
+best_param = params[score.index(max(score))]
+train_x_best_nb = train_x.iloc[:, 0:best_param[1]]
+test_x_best_nb = test_x.iloc[:, 0:best_param[1]]
 
-# best_nb = MultinomialNB(alpha=best_param[0]['alpha'])
-# best_models.append(best_nb)
-# best_nb.fit(train_x_best_nb, train_y)
-# pred_y = best_nb.predict(test_x_best_nb)
-# model_predictions.append(pred_y)
+best_nb = MultinomialNB(alpha=best_param[0]['alpha'])
+best_models.append(best_nb)
+best_nb.fit(train_x_best_nb, train_y)
+pred_y = best_nb.predict(test_x_best_nb)
+model_predictions.append(pred_y)
 
 
-# # top 5 terms supporting truthful/deceptive
-# p = best_nb.feature_log_prob_
-# prob_truth = p[0,:]
-# prob_fake = p[1,:]
+# top 5 terms supporting truthful/deceptive
+p = best_nb.feature_log_prob_
+prob_truth = p[0,:]
+prob_fake = p[1,:]
+ratio = prob_truth/prob_fake
+top5_index_truth = np.flip(np.argsort(ratio))[:5] # supporting truthful
+top5_index_fake = np.flip(np.argsort(ratio))[-5:] # supporting deceptive
+top5_truth = test_x_best_nb.columns[top5_index_truth]
+top5_fake= test_x_best_nb.columns[top5_index_fake]
+print(f"Top 5 supporting truthful: {top5_truth}")
+print(f"Top 5 supporting deceptive: {top5_fake}")
 # index_top5_truth = np.flip(np.argsort(prob_truth))[:5]
 # index_top5_fake = np.flip(np.argsort(prob_fake))[:5]
 # top5_terms_truth = test_x_best_nb.columns[index_top5_truth]
