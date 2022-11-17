@@ -2,10 +2,13 @@
 Dal Col Giada 0093122
 Keller Dirk 4282264
 """
+import time
 import random
 import pandas as pd
 import numpy as np
 from anytree import Node, RenderTree
+from anytree.exporter import DotExporter
+from sklearn.metrics import confusion_matrix, accuracy_score, recall_score, precision_score
 
 class DecisionTree:
     def __init__(self, features: list):
@@ -73,8 +76,8 @@ class DecisionTree:
                         # Check that the number of unique to-be-splitted feature values is at least larger than 1.
                         if len(np.unique(feat)) > 1:
                             split_value = self.best_split(feat, current_node.label)
-                            temp_Lchild, temp_Rchild = self.split(current_node, rng_feat_idx[idx], split_value, minleaf)
-
+                            temp_Lchild, temp_Rchild = self.split(current_node, rng_feat_idx[idx], split_value, minleaf) # rng_feat_idx[idx] is the attribute we are splitting on
+ 
                             # Impurity reduction is only computed if the split is acceptable
                             if temp_Lchild is not None and temp_Rchild is not None:
                                 new_imp_reduc = self.impurity_reduction(current_node, temp_Lchild, temp_Rchild)
@@ -90,7 +93,7 @@ class DecisionTree:
                         candidate_children[0].parent, candidate_children[1].parent = current_node, current_node
                         current_node.best_split, current_node.feat_index = best_split, best_feat_idx
                         current_node.name = current_node.name + '\n' + self.feature_names[
-                            best_feat_idx] + ': \n L > ' + str(round(best_split, 3)) + ' > R'
+                            best_feat_idx] + ': \n L > ' + str(round(best_split, 3)) + ' > R' +'\n' + '0:' + str(len(current_node.label[current_node.label==0])) + ' | 1:' + str(len(current_node.label[current_node.label==1]))
                         node_list.extend([candidate_children[0], candidate_children[1]])
 
                         self.tree_iter += 1

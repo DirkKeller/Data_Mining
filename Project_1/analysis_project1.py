@@ -79,6 +79,8 @@ def main():
     # plotting
     DotExporter(tr.node).to_picture('NoBagNoBoot.png')
 
+
+
     """ (2) with random forest, no bagging (all features) """
     tic = time.time()
     tr2 = dt.tree_grow_b(train_x, train_y, nmin=15, minleaf=5, nfeat=41, m=100)
