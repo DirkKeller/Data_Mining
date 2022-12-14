@@ -2,13 +2,9 @@
 Dal Col Giada 0093122
 Keller Dirk 4282264
 """
-import time
 import random
-import pandas as pd
 import numpy as np
 from anytree import Node, RenderTree
-from anytree.exporter import DotExporter
-from sklearn.metrics import confusion_matrix, accuracy_score, recall_score, precision_score
 
 class DecisionTree:
     def __init__(self, features: list):

@@ -1,18 +1,19 @@
 import time
+import os
 import pandas as pd
 import random
 import numpy as np
 from anytree.exporter import DotExporter
 from sklearn.metrics import confusion_matrix, accuracy_score, recall_score, precision_score
 from project1_decisiontree import DecisionTree
-
+from statsmodels.stats.contingency_tables import mcnemar
 
 def eclipse_data(filename: list) -> tuple:
     """
-    The funcion loads the eclipse data and splits it into a training set (past) and a test set (future).
+    The function loads the eclipse data and splits it into a training set (past) and a test set (future).
     # Arguments
         :param filename: list. Accepts a list of filenames
-        :return: tuple. The features and labels of the tain and test set, as well as, the dataframe of the data.
+        :return: tuple. The features and labels of the train and test set, as well as, the dataframe of the data.
     """
     # Collect the data sets
     data_sets = []
@@ -57,8 +58,15 @@ def main():
     np.random.seed(1234)
     random.seed(1234)
 
+    if os.path.exists('eclipse-metrics-packages-2.0.csv') and os.path.exists('eclipse-metrics-packages-3.0.csv'):
+        filenames = ['eclipse-metrics-packages-2.0.csv',
+                     'eclipse-metrics-packages-3.0.csv']
+    else:
+        os.chdir('D:/Documents/GitHub/Data_Mining/Project_1/')
+        filenames = ['eclipse-metrics-packages-2.0.csv',
+                     'eclipse-metrics-packages-3.0.csv']
+
     # Collect the training and test set
-    filenames = ['eclipse-metrics-packages-2.0.csv', 'eclipse-metrics-packages-3.0.csv']
     train_x, train_y, test_x, test_y, names = eclipse_data(filenames)
 
     # Get a Tree object
@@ -77,9 +85,7 @@ def main():
     print(confusion_matrix(test_y, y_pred))
 
     # plotting
-    DotExporter(tr.node).to_picture('NoBagNoBoot.png')
-
-
+    #DotExporter(tr.node).to_picture('NoBagNoBoot.png')
 
     """ (2) with random forest, no bagging (all features) """
     tic = time.time()
@@ -107,12 +113,26 @@ def main():
     print(confusion_matrix(test_y, y_pred3))
 
     """ McNemar test on the models """
-    print("\nContingency table for model 1 and 2: ")
-    mc_nemar(test_y, y_pred, y_pred2)
-    print("\nContingency table for model 1 and 3: ")
-    mc_nemar(test_y, y_pred, y_pred3)
-    print("\nContingency table for model 2 and 3: ")
-    mc_nemar(test_y, y_pred2, y_pred3)
+    res1 = mc_nemar(test_y, y_pred, y_pred2)
+    print(f'\nContingency table for model 1 and 2: \n {res1}')
+
+    res2 = mc_nemar(test_y, y_pred, y_pred3)
+    print(f'\nContingency table for model 1 and 3:  \n {res2}')
+
+    res3 = mc_nemar(test_y, y_pred2, y_pred3)
+    print(f'\nContingency table for model 2 and 3:  \n {res3}')
+
+    model_predictions = [y_pred, y_pred2, y_pred3]
+    model_names = ['single tree', 'bagging', 'random forest']
+    for i in range(len(model_predictions)):
+        bool_i = model_predictions[i] == test_y
+        for j in range(len(model_predictions)):
+            if i < j:
+                bool_j = model_predictions[j] == test_y
+                table = pd.crosstab(bool_i, bool_j)
+                print(f"cross table of {model_names[i]} against {model_names[j]}:\n {table}")
+                result = mcnemar(table)
+                print(f"statistics value: {result.statistic}, pvalue: {result.pvalue} ")
 
 
 main()
